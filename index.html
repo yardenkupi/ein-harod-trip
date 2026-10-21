@@ -420,7 +420,7 @@ const Offline = L.TileLayer.extend({ getTileUrl(c) { return TILES[c.z + "_" + c.
 new Offline("", { minZoom: 9, maxZoom: 18, minNativeZoom: 8, maxNativeZoom: 12,
   attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' }).addTo(map);
 new Offline("", { minZoom: 13, maxZoom: 18, minNativeZoom: 13, maxNativeZoom: 13 }).addTo(map);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { subdomains: "abcd", minZoom: 9, maxZoom: 18, errorTileUrl: BLANK }).addTo(map);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { minZoom: 9, maxZoom: 18, maxNativeZoom: 19, errorTileUrl: BLANK }).addTo(map);
 
 const routeLatLngs = [[32.0956, 34.9566], [32.30, 34.965], [32.50, 35.03], [32.655, 35.105], [32.715, 35.20],
   [32.746748, 35.276351], [32.7493, 35.2768], [32.7502, 35.2845], [32.7063, 35.3014], [32.607, 35.29], [32.5592, 35.3902]];
