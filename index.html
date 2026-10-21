@@ -577,5 +577,96 @@ setTab(startTab);
 setTimeout(() => map.invalidateSize(), 50);
 </script>
 
+<style>
+.me-dot { width: 18px; height: 18px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(26,115,232,.35), 0 1px 4px rgba(0,0,0,.4); }
+.me-dot.stale { background: #8a94a6; }
+.locate-btn { width: 34px; height: 34px; display: grid; place-items: center; background: #fff; border: 0; cursor: pointer; padding: 0; }
+.locate-btn svg { width: 20px; height: 20px; fill: #333; }
+.locate-btn.on svg { fill: #1a73e8; }
+.locate-btn.busy svg { animation: geo-pulse 1s ease-in-out infinite; }
+@keyframes geo-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .locate-btn.busy svg { animation: none; } }
+.geo-msg { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 900; background: var(--panel); color: var(--fg); box-shadow: var(--shadow); border-radius: 10px; padding: 8px 14px; font-size: .9rem; max-width: calc(100% - 32px); text-align: center; }
+.dist { font-weight: 700; color: #1a73e8; }
+</style>
+<div class="geo-msg" id="geo-msg" hidden></div>
+<script>
+// Current location: blue dot + accuracy circle, a "my location" button, and distance on each place card.
+(function () {
+  if (!("geolocation" in navigator)) return;
+  let me = null, dot = null, ring = null, firstFix = true, watchId = null;
+  const msg = document.getElementById("geo-msg");
+  document.querySelector(".mapwrap").appendChild(msg);
+  function say(text, ms) {
+    msg.textContent = text; msg.hidden = false;
+    clearTimeout(say.t); if (ms) say.t = setTimeout(() => { msg.hidden = true; }, ms);
+  }
+
+  const Btn = L.Control.extend({
+    options: { position: "topleft" },
+    onAdd() {
+      const wrap = L.DomUtil.create("div", "leaflet-bar");
+      const b = L.DomUtil.create("button", "locate-btn", wrap);
+      b.type = "button"; b.title = "המיקום שלי"; b.setAttribute("aria-label", "המיקום שלי");
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A9 9 0 0 0 13 3.06V1h-2v2.06A9 9 0 0 0 3.06 11H1v2h2.06A9 9 0 0 0 11 20.94V23h2v-2.06A9 9 0 0 0 20.94 13H23v-2zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>';
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.on(b, "click", () => {
+        if (me) map.flyTo(me, Math.max(map.getZoom(), 14), { duration: .6 });
+        else { firstFix = true; start(); }
+      });
+      this.btn = b; return wrap;
+    }
+  });
+  const ctl = new Btn().addTo(map);
+
+  function onPos(pos) {
+    me = L.latLng(pos.coords.latitude, pos.coords.longitude);
+    const acc = pos.coords.accuracy;
+    if (!dot) {
+      dot = L.marker(me, { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+        zIndexOffset: 2000, keyboard: false, title: "אתם כאן" }).addTo(map);
+      ring = L.circle(me, { radius: acc, color: "#1a73e8", weight: 1, opacity: .4, fillOpacity: .1, interactive: false }).addTo(map);
+    } else { dot.setLatLng(me); ring.setLatLng(me).setRadius(acc); }
+    ctl.btn.classList.remove("busy"); ctl.btn.classList.add("on");
+    if (firstFix) {
+      firstFix = false; msg.hidden = true;
+      // Keep the current view and stretch it to include you, unless you're far outside the trip area
+      if (map.options.maxBounds && L.latLngBounds(map.options.maxBounds).contains(me))
+        map.fitBounds(map.getBounds().extend(me), { padding: [30, 30] });
+      else say("המיקום שלך מחוץ לאזור הטיול", 4000);
+    }
+    if (selected) renderDetail(byId[selected]);
+  }
+  function onErr(err) {
+    ctl.btn.classList.remove("busy");
+    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if (err.code === 1) say("אין הרשאת מיקום. אפשר להפעיל אותה בהגדרות הדפדפן ולנסות שוב בכפתור המיקום.", 6000);
+    else say("לא הצלחתי למצוא את המיקום. נסו שוב בכפתור המיקום.", 4000);
+    if (dot) dot.getElement()?.querySelector(".me-dot")?.classList.add("stale");
+  }
+  function start() {
+    if (watchId !== null) return;
+    ctl.btn.classList.add("busy");
+    say("מאתר את המיקום שלך…");
+    watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
+  }
+
+  // Straight-line distance on the place card
+  const baseRender = renderDetail;
+  renderDetail = function (p) {
+    baseRender(p);
+    if (!me) return;
+    const km = me.distanceTo([p.lat, p.lon]) / 1000;
+    const where = detail.querySelector(".where");
+    if (where) where.insertAdjacentHTML("beforeend",
+      ` · <span class="dist">${km < 1 ? Math.round(km * 1000) + " מ'" : km.toFixed(km < 10 ? 1 : 0) + ' ק"מ'} ממך (בקו אווירי)</span>`);
+  };
+
+  // Phones locate right away; on desktop it waits for the button
+  const touch = matchMedia("(pointer: coarse)").matches;
+  if (touch) start();
+})();
+</script>
+
 </body>
 </html>
